@@ -1,0 +1,44 @@
+name: Validate Gitmodules Branches
+description: Validate that listed submodules have a .gitmodules branch entry matching the target branch.
+
+inputs:
+  submodules:
+    description: Submodule paths to validate
+    required: true
+  gitmodules-file:
+    description: Path to the .gitmodules file
+    required: false
+    default: .gitmodules
+
+runs:
+  using: composite
+  steps:
+    - name: Validate .gitmodules branch entries
+      env:
+        SUBMODULES: ${{ inputs.submodules }}
+        GITMODULES_FILE: ${{ inputs.gitmodules-file }}
+        BASE_REF: ${{ github.base_ref }}
+        REF_NAME: ${{ github.ref_name }}
+      shell: bash
+      run: |
+        if [ -n "$BASE_REF" ]; then
+          target_branch="$BASE_REF"
+        else
+          target_branch="$REF_NAME"
+        fi
+        failed=0
+        for submodule in $SUBMODULES; do
+          branch=$(git config -f "$GITMODULES_FILE" --get "submodule.${submodule}.branch" || true)
+          if [ -z "$branch" ]; then
+            echo "${submodule}: missing branch entry in ${GITMODULES_FILE}"
+            failed=1
+          elif [ "$branch" != "$target_branch" ]; then
+            echo "${submodule}: branch is '${branch}', expected '${target_branch}'"
+            failed=1
+          fi
+        done
+        if [ "$failed" -ne 0 ]; then
+          echo "gitmodules branch validation failed"
+          exit 1
+        fi
+        echo "gitmodules branch validation passed for target branch '${target_branch}'"
